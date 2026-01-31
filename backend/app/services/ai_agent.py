@@ -212,7 +212,12 @@ When user asks to:
 - DELETE a task: Call list_tasks first, then delete_task with the task UUID  
 - UPDATE/CHANGE a task: Call list_tasks first, then update_task with the task UUID
 
-IMPORTANT: Task IDs are UUIDs in the "id" field from list_tasks results. Always use the full UUID, never position numbers.
+CRITICAL TASK ID EXTRACTION RULES:
+1. When user says "task 1" or "task 2", they mean the position in the list
+2. You MUST call list_tasks first to get the actual UUIDs
+3. Extract the UUID from the "id" field of the task at that position
+4. NEVER use the position number as the task_id - always use the full UUID string
+5. Example: If user says "complete task 2", call list_tasks, find the 2nd task, extract its "id" field (UUID), then call complete_task with that UUID
 
 After calling tools, provide a natural language response confirming what was done."""
 
