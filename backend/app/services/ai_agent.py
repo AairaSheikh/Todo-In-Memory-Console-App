@@ -86,17 +86,36 @@ class AIAgent:
             # Get tool definitions
             tools = self.mcp_server.get_tool_definitions()
             
+            # Debug logging
+            print(f"DEBUG: Formatted messages count: {len(formatted_messages)}")
+            print(f"DEBUG: Tools available: {len(tools)}")
+            print(f"DEBUG: Tool names: {[t['name'] for t in tools]}")
+            print(f"DEBUG: First message (system prompt): {formatted_messages[0]['content'][:300]}...")
+            
+            # Format tools for OpenAI
+            formatted_tools = [{"type": "function", "function": tool} for tool in tools]
+            print(f"DEBUG: Formatted tools sample: {formatted_tools[0]}")
+            
             # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=formatted_messages,
-                tools=[{"type": "function", "function": tool} for tool in tools],
+                tools=formatted_tools,
+                tool_choice="auto",
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
             
             # Parse response
             assistant_message = response.choices[0].message
+            
+            # Debug logging
+            print(f"DEBUG: Response finish_reason: {response.choices[0].finish_reason}")
+            print(f"DEBUG: Assistant message content: {assistant_message.content}")
+            print(f"DEBUG: Tool calls count: {len(assistant_message.tool_calls) if assistant_message.tool_calls else 0}")
+            if assistant_message.tool_calls:
+                for tc in assistant_message.tool_calls:
+                    print(f"DEBUG: Tool call - {tc.function.name}: {tc.function.arguments}")
             
             # Execute tool calls if any
             tool_results = []
@@ -166,7 +185,7 @@ class AIAgent:
                 "content": msg.content,
             })
         
-        # Add current message
+        # Add current message with explicit instruction to use tools
         messages.append({
             "role": "user",
             "content": message,
@@ -182,56 +201,20 @@ class AIAgent:
             
         **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 12.1, 12.2, 12.3, 12.4, 12.5**
         """
-        return """You are a helpful task management assistant. Your role is to help users manage their tasks through conversation.
+        return """You are a task management assistant. Help users manage tasks through conversation.
 
-You have access to the following tools:
-- add_task: Add a new task to the user's task list
-- list_tasks: List all tasks for the user
-- complete_task: Mark a task as complete or incomplete
-- delete_task: Delete a task from the user's task list
-- update_task: Update a task's description or priority
+CRITICAL: You MUST call tools for task operations. Do NOT just talk about what you would do - actually call the tools.
 
-CRITICAL INSTRUCTIONS FOR TASK OPERATIONS:
+When user asks to:
+- ADD a task: Call add_task with the description
+- LIST tasks: Call list_tasks
+- COMPLETE/MARK DONE a task: Call list_tasks first, then complete_task with the task UUID
+- DELETE a task: Call list_tasks first, then delete_task with the task UUID  
+- UPDATE/CHANGE a task: Call list_tasks first, then update_task with the task UUID
 
-When a user asks to ADD a task:
-1. Extract the task description from their message - this is REQUIRED
-2. The description should be the main content of what they want to add
-3. Examples:
-   - "add new task pilates" → description: "pilates"
-   - "add buy groceries" → description: "buy groceries"
-   - "add call mom" → description: "call mom"
-4. Optionally extract priority if mentioned (High, Medium, Low)
-5. ALWAYS provide a non-empty description to the add_task tool
+IMPORTANT: Task IDs are UUIDs in the "id" field from list_tasks results. Always use the full UUID, never position numbers.
 
-When a user asks to UPDATE/CHANGE a task:
-1. FIRST call list_tasks to get all current tasks with their IDs
-2. Find the task they're referring to by matching the description
-3. Extract the task_id from the list_tasks result
-4. IMMEDIATELY call update_task with the correct task_id and new description/priority
-5. Do NOT ask for confirmation - just perform the update
-6. NEVER guess or make up a task_id - always get it from list_tasks first
-
-When a user asks to LIST tasks:
-- Call list_tasks with no parameters
-- Present results in a readable format
-
-When a user asks to COMPLETE/DELETE a task:
-- FIRST call list_tasks to get all current tasks with their IDs
-- Find the task they're referring to:
-  - If they say "task 3", that means the 3rd task in the list
-  - If they mention a description like "walking", find the task with that description
-  - Use conversation history to resolve references
-- Extract the task_id from the list_tasks result
-- Then immediately call complete_task or delete_task with the correct task_id
-- Do NOT ask for confirmation - just perform the action
-
-CONVERSATION HISTORY USAGE:
-- Review the full conversation history to understand context
-- Use it to resolve pronouns and references
-- Remember what tasks have been discussed
-- Extract task IDs from previous successful operations
-
-Remember: Task descriptions MUST NOT be empty. Always extract meaningful content from the user's message. Be proactive and complete operations in a single turn when possible. When users reference tasks by number (like "task 3"), count the position in the list_tasks result."""
+After calling tools, provide a natural language response confirming what was done."""
 
     def _execute_tool_calls(
         self,
@@ -357,33 +340,29 @@ Remember: Task descriptions MUST NOT be empty. Always extract meaningful content
                     response += f"- {error['tool']}: {error['error']}\n"
             
             # If no assistant content but we have successful tool results, generate a summary
+            # BUT: Don't add summary if list_tasks was called (let assistant handle the formatting)
             if not assistant_content and successes:
-                if response:
-                    response += "\n\n"
-                response += "I've completed the following operations:\n"
-                for result in successes:
-                    tool_name = result["tool"]
-                    if tool_name == "add_task":
-                        task = result["result"]
-                        response += f"✓ Added task: {task['description']} (Priority: {task['priority']})\n"
-                    elif tool_name == "list_tasks":
-                        tasks = result["result"]
-                        if tasks:
-                            response += f"✓ Found {len(tasks)} task(s):\n"
-                            for task in tasks:
-                                status = "✓" if task["completed"] else "○"
-                                response += f"  {status} {task['description']} (Priority: {task['priority']})\n"
-                        else:
-                            response += "✓ You have no tasks.\n"
-                    elif tool_name == "complete_task":
-                        task = result["result"]
-                        status = "completed" if task["completed"] else "marked as incomplete"
-                        response += f"✓ Task marked as {status}: {task['description']}\n"
-                    elif tool_name == "delete_task":
-                        response += f"✓ Task deleted successfully\n"
-                    elif tool_name == "update_task":
-                        task = result["result"]
-                        response += f"✓ Updated task: {task['description']} (Priority: {task['priority']})\n"
+                # Check if any of the results are from list_tasks
+                has_list_tasks = any(r["tool"] == "list_tasks" for r in successes)
+                
+                if not has_list_tasks:
+                    if response:
+                        response += "\n\n"
+                    response += "I've completed the following operations:\n"
+                    for result in successes:
+                        tool_name = result["tool"]
+                        if tool_name == "add_task":
+                            task = result["result"]
+                            response += f"✓ Added task: {task['description']} (Priority: {task['priority']})\n"
+                        elif tool_name == "complete_task":
+                            task = result["result"]
+                            status = "completed" if task["completed"] else "marked as incomplete"
+                            response += f"✓ Task marked as {status}: {task['description']}\n"
+                        elif tool_name == "delete_task":
+                            response += f"✓ Task deleted successfully\n"
+                        elif tool_name == "update_task":
+                            task = result["result"]
+                            response += f"✓ Updated task: {task['description']} (Priority: {task['priority']})\n"
         
         # If still no response, provide a default
         if not response:
