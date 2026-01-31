@@ -1,0 +1,5 @@
+"""Repository layer for data access."""
+
+from app.repositories.chat_repository import ChatRepository
+
+__all__ = ["ChatRepository"]

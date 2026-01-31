@@ -1,0 +1,113 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Build outputs
+.next/
+out/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database
+*.db
+*.sqlite
+
+# Hypothesis
+.hypothesis/
+
+# Cache
+.cache/
+
+# OpenAI API keys and secrets
+OPENAI_API_KEY
+*.key
+*.pem
+
+# Frontend build and cache
+.turbo/
+
+# Python virtual environments (additional)
+env/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+
+# IDE extensions
+.vscode/extensions/
+
+# OS specific backups
+.env.local.*.backup
+
+# Kiro specific
+.kiro/settings/mcp.json.backup
+.kiro/hooks/
+
+# Node package manager lock files (optional - uncomment if needed)
+# package-lock.json
+# yarn.lock
+
+# Python package manager
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Celery
+celerybeat-schedule
+
+# SageMath parsed files
+.sage.py
+
+# Environments
+.env.production
+.env.staging
+.venv
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE specific
+*.sublime-project
+*.sublime-workspace
+
+# Misc
+.DS_Store
+.AppleDouble
+.LSOverride
